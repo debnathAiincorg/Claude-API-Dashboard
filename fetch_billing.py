@@ -3,13 +3,8 @@ fetch_billing.py
 ----------------
 Reads ONLY the "Credit balance" amount from
 https://platform.claude.com/settings/billing and appends it (with a timestamp)
-to billing_data.json. No server is used:
-
-  1. this script fetches the balance and saves it in billing_data.json
-     (plus billing_data.js - the same data, in a form a double-clicked HTML
-     file is allowed to load; browsers block reading .json from file://)
-  2. billing_dashboard.html (just double-click it) re-loads that data every
-     few seconds and redraws the chart when it changes.
+to billing_data.json. billing_dashboard.html reads billing_data.json and
+redraws the chart when it changes.
 
 Uses Microsoft Edge with its OWN separate profile. You log in there once with
 the account that owns the API credits; your normal Edge is not touched and can
@@ -21,8 +16,7 @@ its cookies with a key tied to its own folder, so a copied login can't be read.)
 Run (the only command):
     python fetch_billing.py
 
-It fetches the balance once, saves it, uploads it to GitHub, and ends.
-GitHub then publishes the dashboard (.github/workflows/fetch-balance.yml).
+It fetches the balance once, saves it in billing_data.json, and ends.
 If you are not signed in, it opens a sign-in window by itself.
 
 The login is stored in ".edge_billing_profile" next to this script.
@@ -42,8 +36,9 @@ BILLING_URL = "https://platform.claude.com/settings/billing"
 HERE = Path(__file__).resolve().parent
 HTML_FILE = HERE / "billing_dashboard.html"
 DATA_FILE = HERE / "billing_data.json"
-DATA_JS_FILE = HERE / "billing_data.js"
-PROFILE_DIR = HERE / ".edge_billing_profile"
+# The workflow runs from its own copy of the repo, so it sets BILLING_PROFILE_DIR
+# to the login folder in "D:\Claude API Dashboard".
+PROFILE_DIR = Path(os.environ.get("BILLING_PROFILE_DIR") or HERE / ".edge_billing_profile")
 
 BALANCE_LINE_RE = re.compile(r"-?\$\s*([\d,]+(?:\.\d{1,2})?)")
 # Text shown on the sign-in screen (it is served at the billing URL when logged out).
@@ -192,10 +187,7 @@ def save_point(balance: float) -> int:
         "t": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "balance": round(balance, 2),
     })
-    text = json.dumps(points, indent=1)
-    write_file(DATA_FILE, text + "\n")
-    write_file(DATA_JS_FILE, "// Written by fetch_billing.py - copy of billing_data.json for the dashboard.\n"
-                             "window.BILLING_DATA = " + text + ";\n")
+    write_file(DATA_FILE, json.dumps(points, indent=1) + "\n")
     return len(points)
 
 
@@ -222,33 +214,14 @@ def main():
     try:
         record(fetch_balance())
     except NotLoggedIn as e:
+        if os.environ.get("GITHUB_ACTIONS") == "true":  # nobody can sign in inside the workflow
+            sys.exit(f"{e} Run  python fetch_billing.py  in a terminal once to sign in.")
         print(f"{e} Opening the sign-in window...", flush=True)
         login()
         try:
             record(fetch_balance())
         except NotLoggedIn:
             sys.exit("Still not signed in. Run the command again and sign in.")
-    upload_to_github()
-
-
-def git(*args):
-    return subprocess.run(["git", "-C", str(HERE), *args], capture_output=True, text=True)
-
-
-def upload_to_github():
-    """Send the new reading to GitHub. GitHub then publishes the dashboard by itself."""
-    if git("remote", "get-url", "origin").returncode != 0:
-        return  # not connected to GitHub - the reading is still saved on this PC
-    git("add", DATA_FILE.name, DATA_JS_FILE.name)
-    git("commit", "-m", "New balance reading")
-    push = git("push")
-    if push.returncode != 0:  # GitHub has newer commits - take them first, then retry
-        git("pull", "--rebase")
-        push = git("push")
-    if push.returncode == 0:
-        print("Uploaded to GitHub - the online dashboard updates in a few minutes.")
-    else:
-        print("Saved on this PC, but uploading to GitHub failed:\n" + push.stderr.strip())
 
 
 if __name__ == "__main__":

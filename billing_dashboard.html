@@ -85,10 +85,9 @@
 
 <script>
 (() => {
-  // Data lives in billing_data.json (written by fetch_billing.py), which also
-  // writes billing_data.js - the same data in a form a double-clicked page may load.
-  // The page re-loads it every few seconds and redraws when it changes.
-  const POLL_MS = 5000;
+  // Data lives in billing_data.json (written by fetch_billing.py).
+  // The page re-reads it every 60 seconds and redraws when it changes.
+  const POLL_MS = 60000;
   let ALL = [], lastRaw = null, loaded = false, offline = false;
 
   const $ = id => document.getElementById(id);
@@ -109,7 +108,7 @@
     const pts = pick();
     if (!pts.length) {
       const msg = offline
-        ? 'No data file yet.<br>Run <code>python fetch_billing.py</code> - this page updates by itself.'
+        ? 'Could not read billing_data.json.'
         : loaded ? 'No readings yet - the first one is being fetched…' : 'Loading…';
       chart.insertAdjacentHTML("afterbegin", '<div class="empty">' + msg + '</div>');
       return;
@@ -218,32 +217,27 @@
   });
   window.addEventListener("resize", render);
 
-  // Re-load billing_data.js (a fresh <script> tag each time, so the browser
-  // doesn't use an old cached copy). Works when the file is just double-clicked.
-  function poll() {
-    const s = document.createElement("script");
-    s.src = "billing_data.js?_=" + Date.now();
-    s.onload = () => {
-      s.remove();
-      const raw = JSON.stringify(window.BILLING_DATA || []);
+  // Re-read billing_data.json and redraw when it has changed.
+  async function poll() {
+    try {
+      const res = await fetch("billing_data.json?_=" + Date.now(), { cache: "no-store" });
+      if (!res.ok) throw new Error(res.status);
+      const raw = await res.text();
       offline = false;
       setLive(true);
       if (raw !== lastRaw) {
         lastRaw = raw;
-        ALL = (window.BILLING_DATA || [])
+        ALL = JSON.parse(raw || "[]")
           .map(p => ({ t: new Date(p.t), v: +p.balance }))
           .sort((a, b) => a.t - b.t);
         loaded = true;
         render();
       }
-    };
-    s.onerror = () => {
-      s.remove();
+    } catch (e) {
       offline = true;
       setLive(false);
       if (!ALL.length) render();
-    };
-    document.head.appendChild(s);
+    }
   }
   function setLive(on) {
     $("live").className = "live " + (on ? "on" : "off");

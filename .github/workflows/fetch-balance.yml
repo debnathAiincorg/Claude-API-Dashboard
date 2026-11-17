@@ -1,28 +1,50 @@
-# Publish the dashboard on GitHub Pages.
+# Started by Power Automate (GitHub connector: "Create a repository dispatch event",
+# Event Name = fetch-balance) or by the "Run workflow" button.
 #
-# Runs on GitHub's computers (not your PC), only when fetch_billing.py uploads
-# a new reading, then ends. Nothing keeps running anywhere.
+#   1. run fetch_billing.py  -> fetch balance, save billing_data.json, end
+#   2. publish billing_dashboard.html + billing_data.json on GitHub Pages
 #
-#   python fetch_billing.py   ->  fetch balance, save, upload to GitHub, END
-#   GitHub (this workflow)    ->  publish the page, END
+# Step 1 runs on the self-hosted runner on your PC, because the Claude login
+# only exists there.
 
-name: Publish dashboard
+name: Fetch credit balance
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - billing_data.json
-      - billing_data.js
-      - billing_dashboard.html
-  workflow_dispatch:          # "Run workflow" button, to publish by hand
+  repository_dispatch:
+    types: [fetch-balance]
+  workflow_dispatch:
 
 concurrency:
-  group: pages
+  group: fetch-balance
   cancel-in-progress: false
 
 jobs:
+  fetch:
+    runs-on: [self-hosted, Windows]
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: powershell
+    env:
+      BILLING_PROFILE_DIR: D:\Claude API Dashboard\.edge_billing_profile
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run fetch_billing.py
+        run: python fetch_billing.py
+
+      - name: Save billing_data.json
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add billing_data.json
+          git commit -m "New balance reading"
+          git push
+
   publish:
+    needs: fetch
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -32,11 +54,12 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
 
-      - name: Collect only the dashboard files
-        run: |
+      - run: |
           mkdir _site
-          cp billing_dashboard.html billing_data.json billing_data.js _site/
+          cp billing_dashboard.html billing_data.json _site/
           cp billing_dashboard.html _site/index.html
 
       - uses: actions/configure-pages@v5
