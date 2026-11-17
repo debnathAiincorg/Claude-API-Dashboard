@@ -21,7 +21,8 @@ its cookies with a key tied to its own folder, so a copied login can't be read.)
 Run (the only command):
     python fetch_billing.py
 
-It fetches the balance once, saves it, and ends.
+It fetches the balance once, saves it, uploads it to GitHub, and ends.
+GitHub then publishes the dashboard (.github/workflows/fetch-balance.yml).
 If you are not signed in, it opens a sign-in window by itself.
 
 The login is stored in ".edge_billing_profile" next to this script.
@@ -42,10 +43,7 @@ HERE = Path(__file__).resolve().parent
 HTML_FILE = HERE / "billing_dashboard.html"
 DATA_FILE = HERE / "billing_data.json"
 DATA_JS_FILE = HERE / "billing_data.js"
-# The GitHub workflow runs from its own checkout folder, so it points this at the
-# login folder in "D:\Claude API Dashboard" with the BILLING_PROFILE_DIR setting.
-PROFILE_DIR = Path(os.environ.get("BILLING_PROFILE_DIR") or HERE / ".edge_billing_profile")
-IN_GITHUB_ACTIONS = os.environ.get("GITHUB_ACTIONS") == "true"
+PROFILE_DIR = HERE / ".edge_billing_profile"
 
 BALANCE_LINE_RE = re.compile(r"-?\$\s*([\d,]+(?:\.\d{1,2})?)")
 # Text shown on the sign-in screen (it is served at the billing URL when logged out).
@@ -224,15 +222,33 @@ def main():
     try:
         record(fetch_balance())
     except NotLoggedIn as e:
-        if IN_GITHUB_ACTIONS:  # nobody can type into a sign-in window there
-            sys.exit(f"{e} Sign in on the PC: open a terminal in "
-                     "D:\\Claude API Dashboard and run  python fetch_billing.py")
         print(f"{e} Opening the sign-in window...", flush=True)
         login()
         try:
             record(fetch_balance())
         except NotLoggedIn:
             sys.exit("Still not signed in. Run the command again and sign in.")
+    upload_to_github()
+
+
+def git(*args):
+    return subprocess.run(["git", "-C", str(HERE), *args], capture_output=True, text=True)
+
+
+def upload_to_github():
+    """Send the new reading to GitHub. GitHub then publishes the dashboard by itself."""
+    if git("remote", "get-url", "origin").returncode != 0:
+        return  # not connected to GitHub - the reading is still saved on this PC
+    git("add", DATA_FILE.name, DATA_JS_FILE.name)
+    git("commit", "-m", "New balance reading")
+    push = git("push")
+    if push.returncode != 0:  # GitHub has newer commits - take them first, then retry
+        git("pull", "--rebase")
+        push = git("push")
+    if push.returncode == 0:
+        print("Uploaded to GitHub - the online dashboard updates in a few minutes.")
+    else:
+        print("Saved on this PC, but uploading to GitHub failed:\n" + push.stderr.strip())
 
 
 if __name__ == "__main__":

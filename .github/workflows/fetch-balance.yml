@@ -1,57 +1,28 @@
-# Fetch the Claude API credit balance and publish the dashboard on GitHub Pages.
+# Publish the dashboard on GitHub Pages.
 #
-# Started by:
-#   - Power Automate  -> GitHub connector "Create a repository dispatch event"
-#                        with Event Name = fetch-balance
-#   - the "Run workflow" button on the Actions tab (manual)
-# There is NO GitHub time schedule here - Power Automate decides when it runs.
+# Runs on GitHub's computers (not your PC), only when fetch_billing.py uploads
+# a new reading, then ends. Nothing keeps running anywhere.
 #
-# Job 1 runs on YOUR PC (self-hosted runner), because the Claude login only
-# exists there. Job 2 runs on GitHub and publishes the dashboard.
+#   python fetch_billing.py   ->  fetch balance, save, upload to GitHub, END
+#   GitHub (this workflow)    ->  publish the page, END
 
-name: Fetch credit balance
+name: Publish dashboard
 
 on:
-  repository_dispatch:
-    types: [fetch-balance]
-  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - billing_data.json
+      - billing_data.js
+      - billing_dashboard.html
+  workflow_dispatch:          # "Run workflow" button, to publish by hand
 
-# never run two at the same time (they would fight over the Edge login folder)
 concurrency:
-  group: fetch-balance
+  group: pages
   cancel-in-progress: false
 
 jobs:
-  fetch:
-    name: Fetch balance (on my PC)
-    runs-on: [self-hosted, Windows]
-    permissions:
-      contents: write          # to save billing_data.json back to the repo
-    defaults:
-      run:
-        shell: powershell
-    env:
-      # the login folder stays on the PC and is never uploaded
-      BILLING_PROFILE_DIR: D:\Claude API Dashboard\.edge_billing_profile
-      PYTHONIOENCODING: utf-8
-    steps:
-      - name: Get the repo
-        uses: actions/checkout@v4
-
-      - name: Fetch the balance from platform.claude.com
-        run: python fetch_billing.py
-
-      - name: Save the new reading to the repo
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add billing_data.json billing_data.js
-          git commit -m "New balance reading"
-          git push
-
   publish:
-    name: Publish dashboard (GitHub Pages)
-    needs: fetch
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -60,10 +31,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - name: Get the repo (with the reading just saved)
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.repository.default_branch }}
+      - uses: actions/checkout@v4
 
       - name: Collect only the dashboard files
         run: |
