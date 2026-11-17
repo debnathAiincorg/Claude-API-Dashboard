@@ -39,6 +39,7 @@ DATA_FILE = HERE / "billing_data.json"
 # The workflow runs from its own copy of the repo, so it sets BILLING_PROFILE_DIR
 # to the login folder in "D:\Claude API Dashboard".
 PROFILE_DIR = Path(os.environ.get("BILLING_PROFILE_DIR") or HERE / ".edge_billing_profile")
+STORAGE_STATE_FILE = HERE / "session_state.json"  # made by --export-session; never commit it
 
 BALANCE_LINE_RE = re.compile(r"-?\$\s*([\d,]+(?:\.\d{1,2})?)")
 # Text shown on the sign-in screen (it is served at the billing URL when logged out).
@@ -139,39 +140,75 @@ def stop_profile_edge():
     time.sleep(2)
 
 
+def _read_balance_from_page(page):
+    """Open the billing page and wait for the balance. Returns (balance, logged_out)."""
+    page.goto(BILLING_URL, wait_until="domcontentloaded")
+    deadline = time.time() + FETCH_WAIT_SECONDS
+    balance, logged_out = None, False
+    while time.time() < deadline:
+        try:
+            if "/settings/billing" in page.url:
+                text = page.inner_text("body")
+                balance = extract_balance(text)
+                if balance is not None:
+                    break
+                if is_login_screen(text):
+                    logged_out = True
+                    break
+        except Exception:
+            pass  # page still loading / redirecting
+        page.wait_for_timeout(1500)
+    return balance, logged_out
+
+
 def fetch_balance(headless: bool = True) -> float:
     from playwright.sync_api import sync_playwright
 
-    if not PROFILE_DIR.exists():
-        raise NotLoggedIn("Not signed in yet.")
-    stop_profile_edge()  # a leftover background Edge on our profile would block launch
-
-    with sync_playwright() as p:
-        ctx = open_edge(p, headless)
-        page = ctx.pages[0] if ctx.pages else ctx.new_page()
-        page.goto(BILLING_URL, wait_until="domcontentloaded")
-        deadline = time.time() + FETCH_WAIT_SECONDS
-        balance, logged_out = None, False
-        while time.time() < deadline:
-            try:
-                if "/settings/billing" in page.url:
-                    text = page.inner_text("body")
-                    balance = extract_balance(text)
-                    if balance is not None:
-                        break
-                    if is_login_screen(text):
-                        logged_out = True
-                        break
-            except Exception:
-                pass  # page still loading / redirecting
-            page.wait_for_timeout(1500)
-        ctx.close()
+    state = os.environ.get("BILLING_STORAGE_STATE")
+    if state:
+        # CLOUD mode (GitHub): use the session from the GitHub Secret, plain browser.
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            ctx = browser.new_context(storage_state=json.loads(state),
+                                      viewport={"width": 1280, "height": 900})
+            balance, logged_out = _read_balance_from_page(ctx.new_page())
+            browser.close()
+    else:
+        # LAPTOP mode: use the signed-in Edge profile on this PC.
+        if not PROFILE_DIR.exists():
+            raise NotLoggedIn("Not signed in yet.")
+        stop_profile_edge()  # a leftover background Edge on our profile would block launch
+        with sync_playwright() as p:
+            ctx = open_edge(p, headless)
+            page = ctx.pages[0] if ctx.pages else ctx.new_page()
+            balance, logged_out = _read_balance_from_page(page)
+            ctx.close()
 
     if logged_out:
         raise NotLoggedIn("The sign-in has expired.")
     if balance is None:
         sys.exit("Could not find the Credit balance on the billing page - will try again next time.")
     return balance
+
+
+def export_session():
+    """Run ONCE on your laptop (after --login) to save the signed-in session to a
+    file. Paste that file's contents into the GitHub Secret BILLING_STORAGE_STATE
+    so the cloud workflow can read the balance without your laptop."""
+    from playwright.sync_api import sync_playwright
+
+    if not PROFILE_DIR.exists():
+        sys.exit("Sign in first:  python fetch_billing.py --login")
+    stop_profile_edge()
+    with sync_playwright() as p:
+        ctx = open_edge(p, headless=True)
+        state = ctx.storage_state()
+        ctx.close()
+    STORAGE_STATE_FILE.write_text(json.dumps(state), encoding="utf-8")
+    print(f"Saved the session to {STORAGE_STATE_FILE.name}")
+    print("Next: open that file, copy ALL of its text, and paste it into the GitHub")
+    print("Secret named BILLING_STORAGE_STATE (Settings -> Secrets and variables -> Actions).")
+    print("Then DELETE the file - it holds the login and must not be shared or uploaded.")
 
 
 def load_points() -> list:
@@ -211,11 +248,21 @@ def main():
     except ImportError:
         sys.exit("Playwright is not installed. Run:  pip install playwright")
 
+    arg = sys.argv[1] if len(sys.argv) > 1 else ""
+    if arg == "--login":
+        login()
+        return
+    if arg == "--export-session":
+        export_session()
+        return
+
     try:
         record(fetch_balance())
     except NotLoggedIn as e:
-        if os.environ.get("GITHUB_ACTIONS") == "true":  # nobody can sign in inside the workflow
-            sys.exit(f"{e} Run  python fetch_billing.py  in a terminal once to sign in.")
+        if os.environ.get("GITHUB_ACTIONS") == "true":  # cloud: can't sign in there
+            sys.exit(f"{e}\nThe session in the GitHub Secret has expired. On your laptop run:\n"
+                     "  python fetch_billing.py --export-session\n"
+                     "then update the Secret BILLING_STORAGE_STATE with the new file's contents.")
         print(f"{e} Opening the sign-in window...", flush=True)
         login()
         try:

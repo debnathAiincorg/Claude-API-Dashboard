@@ -1,11 +1,10 @@
 # Started by Power Automate (GitHub connector: "Create a repository dispatch event",
 # Event Name = fetch-balance) or by the "Run workflow" button.
 #
-#   1. run fetch_billing.py  -> fetch balance, save billing_data.json, end
+# Everything runs on GitHub's computers (your laptop is NOT used):
+#   1. run fetch_billing.py with the session from the secret BILLING_STORAGE_STATE
+#      -> fetch balance, save billing_data.json, end
 #   2. publish billing_dashboard.html + billing_data.json on GitHub Pages
-#
-# Step 1 runs on the self-hosted runner on your PC, because the Claude login
-# only exists there.
 
 name: Fetch credit balance
 
@@ -20,19 +19,24 @@ concurrency:
 
 jobs:
   fetch:
-    runs-on: [self-hosted, Windows]
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    defaults:
-      run:
-        shell: powershell
-    env:
-      BILLING_PROFILE_DIR: D:\Claude API Dashboard\.edge_billing_profile
-      PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Playwright + browser
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
       - name: Run fetch_billing.py
+        env:
+          BILLING_STORAGE_STATE: ${{ secrets.BILLING_STORAGE_STATE }}
         run: python fetch_billing.py
 
       - name: Save billing_data.json
@@ -40,7 +44,7 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add billing_data.json
-          git commit -m "New balance reading"
+          git diff --staged --quiet || git commit -m "New balance reading"
           git push
 
   publish:

@@ -1,6 +1,7 @@
 # Login for the Claude account - must NEVER be uploaded
 .edge_billing_profile/
 .billing_browser_profile/
+session_state.json
 
 __pycache__/
 *.tmp
