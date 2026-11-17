@@ -45,6 +45,9 @@
   .stat .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
   .empty { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--muted); text-align: center; }
   .live { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 8px; vertical-align: middle; }
+  #refreshBtn { font-size: 12px; margin-left: 8px; vertical-align: middle; cursor: pointer;
+    background: #2a2a28; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; }
+  #refreshBtn:hover { border-color: var(--accent); }
   .live i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--down); }
   .live.on i { background: var(--up); box-shadow: 0 0 0 0 rgba(63,178,127,.6); animation: pulse 2s infinite; }
   @keyframes pulse { 70% { box-shadow: 0 0 0 6px rgba(63,178,127,0); } 100% { box-shadow: 0 0 0 0 rgba(63,178,127,0); } }
@@ -54,7 +57,8 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Claude API Credit Balance <span class="live off" id="live"><i></i> Loading</span></h1>
+  <h1>Claude API Credit Balance <span class="live off" id="live"><i></i> Loading</span>
+    <button id="refreshBtn" title="Check for new data now">Refresh</button></h1>
   <p class="sub">Readings from platform.claude.com/settings/billing, recorded by <code>fetch_billing.py</code></p>
 
   <div class="card">
@@ -87,7 +91,8 @@
 (() => {
   // Data lives in billing_data.json (written by fetch_billing.py).
   // The page re-reads it every 60 seconds and redraws when it changes.
-  const POLL_MS = 60000;
+  const POLL_MS = 30000;        // check billing_data.json every 30 seconds
+  const RELOAD_MS = 300000;     // reload the whole page every 5 min as a safety net
   let ALL = [], lastRaw = null, loaded = false, offline = false;
 
   const $ = id => document.getElementById(id);
@@ -241,11 +246,14 @@
   }
   function setLive(on) {
     $("live").className = "live " + (on ? "on" : "off");
-    $("live").lastChild.textContent = on ? " Auto-updating" : " No data file";
+    const now = new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    $("live").lastChild.textContent = on ? " Auto-updating · checked " + now : " Offline";
   }
+  $("refreshBtn").addEventListener("click", poll);
   render();
   poll();
   setInterval(poll, POLL_MS);
+  setTimeout(() => location.reload(), RELOAD_MS);
 })();
 </script>
 </body>
