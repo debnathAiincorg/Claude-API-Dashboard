@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Credit Balance Tracker</title>
+<style>
+  :root {
+    --bg: #141413; --panel: #1c1c1b; --border: #2e2e2c;
+    --text: #ecebe6; --muted: #9a9890; --grid: #2a2a28;
+    --up: #3fb27f; --down: #e5534b; --accent: #d97757;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 32px 16px; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px; }
+  .label { color: var(--muted); font-size: 13px; }
+  .price { font-size: 40px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+  .chg { font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .chg.up { color: var(--up); } .chg.down { color: var(--down); } .chg.flat { color: var(--muted); }
+  .ranges { display: flex; gap: 4px; }
+  .ranges button {
+    background: transparent; color: var(--muted); border: 1px solid transparent;
+    border-radius: 6px; padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .ranges button:hover { color: var(--text); }
+  .ranges button.on { color: var(--text); background: #2a2a28; border-color: var(--border); }
+  .chart { position: relative; margin-top: 16px; height: 360px; }
+  svg { display: block; width: 100%; height: 100%; }
+  .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .tip {
+    position: absolute; pointer-events: none; background: #262624; border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 10px; font-size: 12px; white-space: nowrap; display: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .tip b { font-size: 14px; display: block; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .stat .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .empty { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--muted); text-align: center; }
+  .live { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 8px; vertical-align: middle; }
+  .live i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--down); }
+  .live.on i { background: var(--up); box-shadow: 0 0 0 0 rgba(63,178,127,.6); animation: pulse 2s infinite; }
+  @keyframes pulse { 70% { box-shadow: 0 0 0 6px rgba(63,178,127,0); } 100% { box-shadow: 0 0 0 0 rgba(63,178,127,0); } }
+  code { background: #262624; padding: 1px 6px; border-radius: 4px; }
+  @media (max-width: 640px) { .stats { grid-template-columns: repeat(2, 1fr); } .price { font-size: 32px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Claude API Credit Balance <span class="live off" id="live"><i></i> Loading</span></h1>
+  <p class="sub">Readings from platform.claude.com/settings/billing, recorded by <code>fetch_billing.py</code></p>
+
+  <div class="card">
+    <div class="head">
+      <div>
+        <div class="label">Credit balance</div>
+        <div class="price" id="price">—</div>
+        <div class="chg flat" id="chg">No data yet</div>
+      </div>
+      <div class="ranges" id="ranges">
+        <button data-r="1">1D</button>
+        <button data-r="7">1W</button>
+        <button data-r="30">1M</button>
+        <button data-r="90">3M</button>
+        <button data-r="0" class="on">ALL</button>
+      </div>
+    </div>
+    <div class="chart" id="chart"><div class="tip" id="tip"></div></div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="label">Period high</div><div class="v" id="hi">—</div></div>
+    <div class="stat"><div class="label">Period low</div><div class="v" id="lo">—</div></div>
+    <div class="stat"><div class="label">Spent in period</div><div class="v" id="spent">—</div></div>
+    <div class="stat"><div class="label">Last updated</div><div class="v" id="upd" style="font-size:14px">—</div></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // Data lives in billing_data.json (written by fetch_billing.py), which also
+  // writes billing_data.js - the same data in a form a double-clicked page may load.
+  // The page re-loads it every few seconds and redraws when it changes.
+  const POLL_MS = 5000;
+  let ALL = [], lastRaw = null, loaded = false, offline = false;
+
+  const $ = id => document.getElementById(id);
+  const money = v => "$" + v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtTime = d => d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const chart = $("chart"), tip = $("tip");
+  let range = 0;
+
+  function pick() {
+    if (!range || !ALL.length) return ALL;
+    const cut = ALL[ALL.length - 1].t - range * 864e5;
+    const pts = ALL.filter(p => p.t >= cut);
+    return pts.length ? pts : ALL.slice(-1);
+  }
+
+  function render() {
+    chart.querySelectorAll("svg,.empty").forEach(n => n.remove());
+    const pts = pick();
+    if (!pts.length) {
+      const msg = offline
+        ? 'No data file yet.<br>Run <code>python fetch_billing.py</code> - this page updates by itself.'
+        : loaded ? 'No readings yet - the first one is being fetched…' : 'Loading…';
+      chart.insertAdjacentHTML("afterbegin", '<div class="empty">' + msg + '</div>');
+      return;
+    }
+
+    const first = pts[0].v, last = pts[pts.length - 1].v, diff = last - first;
+    const pct = first ? diff / first * 100 : 0;
+    const dir = diff > 0.004 ? "up" : diff < -0.004 ? "down" : "flat";
+    const color = dir === "up" ? "var(--up)" : dir === "down" ? "var(--down)" : "var(--muted)";
+    $("price").textContent = money(last);
+    $("chg").className = "chg " + dir;
+    $("chg").textContent = (diff >= 0 ? "+" : "−") + money(Math.abs(diff)) +
+      " (" + (pct >= 0 ? "+" : "") + pct.toFixed(2) + "%) " + (range ? "this period" : "since first reading");
+    const vals = pts.map(p => p.v);
+    $("hi").textContent = money(Math.max(...vals));
+    $("lo").textContent = money(Math.min(...vals));
+    // spent = sum of drops (top-ups are ignored)
+    let spent = 0;
+    for (let i = 1; i < pts.length; i++) if (pts[i].v < pts[i - 1].v) spent += pts[i - 1].v - pts[i].v;
+    $("spent").textContent = money(spent);
+    $("upd").textContent = fmtTime(pts[pts.length - 1].t);
+
+    const W = chart.clientWidth, H = chart.clientHeight;
+    const m = { l: 8, r: 64, t: 12, b: 26 };
+    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    const pad = (hi - lo) * 0.12 || Math.max(hi * 0.02, 0.5);
+    lo -= pad; hi += pad;
+    const t0 = +pts[0].t, t1 = +pts[pts.length - 1].t, span = t1 - t0 || 1;
+    const x = t => pts.length === 1 ? m.l + iw / 2 : m.l + (t - t0) / span * iw;
+    const y = v => m.t + (hi - v) / (hi - lo) * ih;
+
+    const NS = "http://www.w3.org/2000/svg";
+    const el = (tag, attrs, parent) => {
+      const n = document.createElementNS(NS, tag);
+      for (const k in attrs) n.setAttribute(k, attrs[k]);
+      parent && parent.appendChild(n);
+      return n;
+    };
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}` });
+    chart.insertBefore(svg, tip);
+
+    const defs = el("defs", {}, svg);
+    const g = el("linearGradient", { id: "fill", x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+    el("stop", { offset: "0%", "stop-color": color, "stop-opacity": 0.28 }, g);
+    el("stop", { offset: "100%", "stop-color": color, "stop-opacity": 0 }, g);
+
+    // horizontal grid + right-side price axis
+    for (let i = 0; i <= 4; i++) {
+      const v = lo + (hi - lo) * i / 4, yy = y(v);
+      el("line", { x1: m.l, x2: m.l + iw, y1: yy, y2: yy, stroke: "var(--grid)", "stroke-width": 1 }, svg);
+      el("text", { x: m.l + iw + 8, y: yy + 4, class: "axis" }, svg).textContent = money(v);
+    }
+    // time axis
+    const ticks = Math.min(5, pts.length);
+    for (let i = 0; i < ticks; i++) {
+      const t = ticks === 1 ? t0 : t0 + span * i / (ticks - 1);
+      const anchor = ticks === 1 ? "middle" : i === 0 ? "start" : i === ticks - 1 ? "end" : "middle";
+      el("text", { x: x(t), y: H - 6, class: "axis", "text-anchor": anchor }, svg)
+        .textContent = fmtTime(new Date(t));
+    }
+
+    const line = pts.map((p, i) => (i ? "L" : "M") + x(+p.t).toFixed(1) + "," + y(p.v).toFixed(1)).join("");
+    if (pts.length > 1) {
+      el("path", { d: line + `L${x(t1)},${m.t + ih}L${x(t0)},${m.t + ih}Z`, fill: "url(#fill)" }, svg);
+      el("path", { d: line, fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+    }
+    // last-price marker line + dot
+    el("line", { x1: m.l, x2: m.l + iw, y1: y(last), y2: y(last), stroke: color,
+      "stroke-dasharray": "3 4", "stroke-opacity": 0.6 }, svg);
+    el("circle", { cx: x(t1), cy: y(last), r: 4, fill: color }, svg);
+
+    // crosshair hover
+    const vline = el("line", { y1: m.t, y2: m.t + ih, stroke: "var(--muted)", "stroke-dasharray": "3 3", visibility: "hidden" }, svg);
+    const dot = el("circle", { r: 5, fill: color, stroke: "var(--bg)", "stroke-width": 2, visibility: "hidden" }, svg);
+    const hit = el("rect", { x: m.l, y: m.t, width: iw, height: ih, fill: "transparent" }, svg);
+    const move = e => {
+      const r = svg.getBoundingClientRect();
+      const mx = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+      let best = pts[0];
+      for (const p of pts) if (Math.abs(x(+p.t) - mx) < Math.abs(x(+best.t) - mx)) best = p;
+      const px = x(+best.t), py = y(best.v);
+      vline.setAttribute("x1", px); vline.setAttribute("x2", px);
+      dot.setAttribute("cx", px); dot.setAttribute("cy", py);
+      vline.setAttribute("visibility", "visible"); dot.setAttribute("visibility", "visible");
+      tip.innerHTML = `<b>${money(best.v)}</b>${fmtTime(best.t)}`;
+      tip.style.display = "block";
+      const tw = tip.offsetWidth;
+      tip.style.left = Math.min(Math.max(px - tw / 2, 0), W - tw) + "px";
+      tip.style.top = Math.max(py - 54, 0) + "px";
+    };
+    const leave = () => {
+      vline.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden");
+      tip.style.display = "none";
+    };
+    hit.addEventListener("mousemove", move);
+    hit.addEventListener("touchmove", move, { passive: true });
+    hit.addEventListener("mouseleave", leave);
+    hit.addEventListener("touchend", leave);
+  }
+
+  $("ranges").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    document.querySelectorAll("#ranges button").forEach(n => n.classList.toggle("on", n === b));
+    range = +b.dataset.r; render();
+  });
+  window.addEventListener("resize", render);
+
+  // Re-load billing_data.js (a fresh <script> tag each time, so the browser
+  // doesn't use an old cached copy). Works when the file is just double-clicked.
+  function poll() {
+    const s = document.createElement("script");
+    s.src = "billing_data.js?_=" + Date.now();
+    s.onload = () => {
+      s.remove();
+      const raw = JSON.stringify(window.BILLING_DATA || []);
+      offline = false;
+      setLive(true);
+      if (raw !== lastRaw) {
+        lastRaw = raw;
+        ALL = (window.BILLING_DATA || [])
+          .map(p => ({ t: new Date(p.t), v: +p.balance }))
+          .sort((a, b) => a.t - b.t);
+        loaded = true;
+        render();
+      }
+    };
+    s.onerror = () => {
+      s.remove();
+      offline = true;
+      setLive(false);
+      if (!ALL.length) render();
+    };
+    document.head.appendChild(s);
+  }
+  function setLive(on) {
+    $("live").className = "live " + (on ? "on" : "off");
+    $("live").lastChild.textContent = on ? " Auto-updating" : " No data file";
+  }
+  render();
+  poll();
+  setInterval(poll, POLL_MS);
+})();
+</script>
+</body>
+</html>
