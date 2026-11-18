@@ -7,9 +7,10 @@
 <title>Credit Balance Tracker</title>
 <style>
   :root {
-    --bg: #141413; --panel: #1c1c1b; --border: #2e2e2c;
-    --text: #ecebe6; --muted: #9a9890; --grid: #2a2a28;
-    --up: #3fb27f; --down: #e5534b; --accent: #d97757; --bar: #5b9bd5;
+    --bg: #eef5fc; --panel: #ffffff; --border: #cdddee;
+    --text: #1f2a37; --muted: #5b6b7b; --grid: #e6eef6;
+    --up: #15a35b; --down: #e5484d; --accent: #2f6fb0;
+    --barbg: #d7e9fb;   /* light-blue nav / sidebar / status bars */
   }
   * { box-sizing: border-box; }
   body {
@@ -20,7 +21,7 @@
   .app { display: grid; gap: 16px; max-width: 1180px; margin: 0 auto; padding: 16px;
     grid-template-columns: 240px 1fr;
     grid-template-areas: "top top" "left main" "bottom bottom"; }
-  .bar { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+  .bar { background: var(--barbg); border: 1px solid var(--border); border-radius: 12px; }
   .topbar { grid-area: top; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 14px 20px; }
   .topbar .price { font-size: 30px; }
   .leftbar { grid-area: left; padding: 16px; display: flex; flex-direction: column; gap: 18px; }
@@ -38,17 +39,18 @@
   .ranges { display: flex; gap: 4px; }
   .ranges.vert { flex-direction: column; gap: 6px; }
   .ranges button {
-    background: transparent; color: var(--muted); border: 1px solid var(--border);
+    background: #fff; color: var(--muted); border: 1px solid var(--border);
     border-radius: 6px; padding: 7px 10px; font: inherit; font-size: 13px; cursor: pointer; text-align: left;
   }
-  .ranges button:hover { color: var(--text); }
-  .ranges button.on { color: var(--text); background: #2a2a28; border-color: var(--accent); }
+  .ranges button:hover { color: var(--text); border-color: var(--accent); }
+  .ranges button.on { color: var(--accent); background: #fff; border-color: var(--accent); font-weight: 600; }
   .chart { position: relative; margin-top: 16px; height: 360px; }
   svg { display: block; width: 100%; height: 100%; }
   .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
   .tip {
-    position: absolute; pointer-events: none; background: #262624; border: 1px solid var(--border);
+    position: absolute; pointer-events: none; background: #fff; color: var(--text); border: 1px solid var(--border);
     border-radius: 8px; padding: 6px 10px; font-size: 12px; white-space: nowrap; display: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,.12);
     font-variant-numeric: tabular-nums;
   }
   .tip b { font-size: 14px; display: block; }
@@ -58,15 +60,15 @@
   .empty { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--muted); text-align: center; }
   .live { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 8px; vertical-align: middle; }
   #refreshBtn { font-size: 12px; margin-left: 8px; vertical-align: middle; cursor: pointer;
-    background: #2a2a28; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; }
-  #refreshBtn:hover { border-color: var(--accent); }
+    background: #fff; color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px; }
+  #refreshBtn:hover { border-color: var(--accent); color: var(--accent); }
   /* flashing Updated / Not Updated pill */
-  .pill { font-size: 13px; font-weight: 600; border-radius: 999px; padding: 5px 13px;
+  .pill { background: #fff; font-size: 13px; font-weight: 600; border-radius: 999px; padding: 5px 13px;
     border: 1px solid; display: inline-flex; align-items: center; gap: 7px; vertical-align: middle; }
   .pill i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
-  .pill.ok  { color: var(--up);   border-color: var(--up); }
+  .pill.ok  { color: var(--up);   border-color: #bfe3cd; }
   .pill.ok i  { background: var(--up); }
-  .pill.not { color: var(--down); border-color: var(--down); }
+  .pill.not { color: var(--down); border-color: #f2c2c4; }
   .pill.not i { background: var(--down); }
   .pill.flash { animation: flash 1s steps(1, end) infinite; }
   @keyframes flash { 50% { opacity: 0.2; } }
@@ -203,48 +205,51 @@
       el("text", { x: m.l + iw + 8, y: yy + 4, class: "axis" }, svg).textContent = money(v);
     }
 
-    // vertical BARS, one per reading
-    const n = pts.length;
-    const slot = iw / n;
-    const barW = Math.max(1, Math.min(slot * 0.72, 46));
-    const base = m.t + ih;
-    const bars = [];
-    pts.forEach((p, i) => {
-      const cx = m.l + slot * (i + 0.5);
-      const yy = y(p.v);
-      el("rect", {
-        x: (cx - barW / 2).toFixed(1), y: yy.toFixed(1), width: barW.toFixed(1),
-        height: Math.max(0, base - yy).toFixed(1), rx: Math.min(3, barW / 3),
-        fill: "var(--bar)", "fill-opacity": 0.9
-      }, svg).__cx = cx;
-      bars.push({ cx, p, yy, rect: svg.lastChild });
-    });
-
     // time axis (a few evenly spaced labels)
-    const ticks = Math.min(5, n);
+    const ticks = Math.min(5, pts.length);
     for (let i = 0; i < ticks; i++) {
-      const idx = ticks === 1 ? 0 : Math.round(i * (n - 1) / (ticks - 1));
-      const anchor = i === 0 ? "start" : i === ticks - 1 ? "end" : "middle";
-      el("text", { x: bars[idx].cx, y: H - 6, class: "axis", "text-anchor": anchor }, svg)
-        .textContent = fmtTime(pts[idx].t);
+      const t = ticks === 1 ? t0 : t0 + span * i / (ticks - 1);
+      const anchor = ticks === 1 ? "middle" : i === 0 ? "start" : i === ticks - 1 ? "end" : "middle";
+      el("text", { x: x(t), y: H - 6, class: "axis", "text-anchor": anchor }, svg)
+        .textContent = fmtTime(new Date(t));
     }
 
-    // hover: highlight the nearest bar and show the tooltip
+    // STOCK-STYLE line + area fill
+    const defs = el("defs", {}, svg);
+    const g = el("linearGradient", { id: "fill", x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+    el("stop", { offset: "0%", "stop-color": color, "stop-opacity": 0.22 }, g);
+    el("stop", { offset: "100%", "stop-color": color, "stop-opacity": 0 }, g);
+    const line = pts.map((p, i) => (i ? "L" : "M") + x(+p.t).toFixed(1) + "," + y(p.v).toFixed(1)).join("");
+    if (pts.length > 1) {
+      el("path", { d: line + `L${x(t1)},${m.t + ih}L${x(t0)},${m.t + ih}Z`, fill: "url(#fill)" }, svg);
+      el("path", { d: line, fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+    }
+    // last-price dashed line + dot
+    el("line", { x1: m.l, x2: m.l + iw, y1: y(last), y2: y(last), stroke: color,
+      "stroke-dasharray": "3 4", "stroke-opacity": 0.6 }, svg);
+    el("circle", { cx: x(t1), cy: y(last), r: 4, fill: color }, svg);
+
+    // crosshair hover
+    const vline = el("line", { y1: m.t, y2: m.t + ih, stroke: "var(--muted)", "stroke-dasharray": "3 3", visibility: "hidden" }, svg);
+    const dot = el("circle", { r: 5, fill: color, stroke: "var(--panel)", "stroke-width": 2, visibility: "hidden" }, svg);
     const hit = el("rect", { x: m.l, y: m.t, width: iw, height: ih, fill: "transparent" }, svg);
     const move = e => {
       const r = svg.getBoundingClientRect();
       const mx = ((e.touches ? e.touches[0].clientX : e.clientX) - r.left) * (W / r.width);
-      let best = bars[0];
-      for (const b of bars) if (Math.abs(b.cx - mx) < Math.abs(best.cx - mx)) best = b;
-      bars.forEach(b => b.rect.setAttribute("fill-opacity", b === best ? 1 : 0.4));
-      tip.innerHTML = `<b>${money(best.p.v)}</b>${fmtTime(best.p.t)}`;
+      let best = pts[0];
+      for (const p of pts) if (Math.abs(x(+p.t) - mx) < Math.abs(x(+best.t) - mx)) best = p;
+      const px = x(+best.t), py = y(best.v);
+      vline.setAttribute("x1", px); vline.setAttribute("x2", px);
+      dot.setAttribute("cx", px); dot.setAttribute("cy", py);
+      vline.setAttribute("visibility", "visible"); dot.setAttribute("visibility", "visible");
+      tip.innerHTML = `<b>${money(best.v)}</b>${fmtTime(best.t)}`;
       tip.style.display = "block";
       const tw = tip.offsetWidth;
-      tip.style.left = Math.min(Math.max(best.cx - tw / 2, 0), W - tw) + "px";
-      tip.style.top = Math.max(best.yy - 54, 0) + "px";
+      tip.style.left = Math.min(Math.max(px - tw / 2, 0), W - tw) + "px";
+      tip.style.top = Math.max(py - 54, 0) + "px";
     };
     const leave = () => {
-      bars.forEach(b => b.rect.setAttribute("fill-opacity", 0.9));
+      vline.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden");
       tip.style.display = "none";
     };
     hit.addEventListener("mousemove", move);
