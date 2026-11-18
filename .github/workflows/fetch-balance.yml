@@ -12,6 +12,11 @@ on:
   repository_dispatch:
     types: [fetch-balance]
   workflow_dispatch:
+  push:                      # frontend edits re-publish the page by themselves
+    branches: [main]
+    paths:
+      - billing_dashboard.html
+      - billing_data.json
 
 concurrency:
   group: fetch-balance
@@ -19,6 +24,7 @@ concurrency:
 
 jobs:
   fetch:
+    if: github.event_name != 'push'   # a push only needs to re-publish, not re-fetch
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -49,6 +55,7 @@ jobs:
 
   publish:
     needs: fetch
+    if: ${{ !cancelled() && (needs.fetch.result == 'success' || needs.fetch.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       pages: write
