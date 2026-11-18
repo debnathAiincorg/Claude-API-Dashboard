@@ -26,8 +26,16 @@
   .topbar .price { font-size: 30px; }
   .leftbar { grid-area: left; padding: 16px; display: flex; flex-direction: column; gap: 18px; }
   .mainarea { grid-area: main; }
-  .bottombar { grid-area: bottom; padding: 14px 20px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+  .bottombar { grid-area: bottom; padding: 10px 16px; color: var(--muted); font-size: 12px;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .brand { font-size: 18px; font-weight: 600; }
+  /* balance block drawn inside the chart, top-left (stock style) */
+  .card { position: relative; }
+  .overlay { position: absolute; top: 16px; left: 20px; z-index: 2; pointer-events: none;
+    text-shadow: 0 0 6px #fff, 0 0 6px #fff, 0 0 6px #fff; }
+  .overlay .brand { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .overlay .price { font-size: 30px; line-height: 1.1; }
+  .overlay .chg { margin-top: 2px; }
   h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
   .sub { color: var(--muted); margin: 0 0 24px; }
   .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
@@ -44,7 +52,7 @@
   }
   .ranges button:hover { color: var(--text); border-color: var(--accent); }
   .ranges button.on { color: var(--accent); background: #fff; border-color: var(--accent); font-weight: 600; }
-  .chart { position: relative; margin-top: 16px; height: 360px; }
+  .chart { position: relative; margin-top: 0; height: 420px; }
   svg { display: block; width: 100%; height: 100%; }
   .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
   .tip {
@@ -83,12 +91,6 @@
 <div class="app">
   <!-- TOP BAR -->
   <header class="bar topbar">
-    <div class="brand">Claude API Credit Balance</div>
-    <div>
-      <div class="label">Credit balance</div>
-      <div class="price" id="price">—</div>
-    </div>
-    <div class="chg flat" id="chg">No data yet</div>
     <span class="label" style="margin-left:auto">Last updated (Indian time): <b id="updTime">—</b></span>
     <span class="pill not flash" id="status"><i></i> Not Updated</span>
     <button id="refreshBtn" title="Check for new data now">Refresh</button>
@@ -96,16 +98,6 @@
 
   <!-- LEFT SIDEBAR -->
   <aside class="bar leftbar">
-    <div>
-      <div class="label" style="margin-bottom:8px">Time range</div>
-      <div class="ranges vert" id="ranges">
-        <button data-r="1">1D</button>
-        <button data-r="7">1W</button>
-        <button data-r="30">1M</button>
-        <button data-r="90">3M</button>
-        <button data-r="0" class="on">ALL</button>
-      </div>
-    </div>
     <div class="stats">
       <div class="stat"><div class="label">Period high</div><div class="v" id="hi">—</div></div>
       <div class="stat"><div class="label">Period low</div><div class="v" id="lo">—</div></div>
@@ -117,13 +109,26 @@
   <!-- CHART -->
   <main class="mainarea">
     <div class="card">
+      <div class="overlay">
+        <div class="brand">Claude API Credit Balance</div>
+        <div class="label">Credit balance</div>
+        <div class="price" id="price">—</div>
+        <div class="chg flat" id="chg">No data yet</div>
+      </div>
       <div class="chart" id="chart"><div class="tip" id="tip"></div></div>
     </div>
   </main>
 
-  <!-- BOTTOM BAR -->
+  <!-- BOTTOM STATUS BAR -->
   <footer class="bar bottombar">
-    The page checks for new data by itself; GitHub may cache it for up to 10 minutes.
+    <div class="ranges" id="ranges">
+      <button data-r="1">1D</button>
+      <button data-r="7">1W</button>
+      <button data-r="30">1M</button>
+      <button data-r="90">3M</button>
+      <button data-r="0" class="on">ALL</button>
+    </div>
+    <span style="margin-left:auto">Updates by itself; GitHub may cache it for up to 10 minutes.</span>
   </footer>
 </div>
 
@@ -179,7 +184,7 @@
     $("updTime").textContent = fmtIST(pts[pts.length - 1].t);
 
     const W = chart.clientWidth, H = chart.clientHeight;
-    const m = { l: 8, r: 64, t: 12, b: 26 };
+    const m = { l: 8, r: 64, t: 92, b: 26 };  // extra top room for the balance overlay
     const iw = W - m.l - m.r, ih = H - m.t - m.b;
     let lo = Math.min(...vals), hi = Math.max(...vals);
     const pad = (hi - lo) * 0.12 || Math.max(hi * 0.02, 0.5);
