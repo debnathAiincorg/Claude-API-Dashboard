@@ -229,7 +229,9 @@
       el("circle", { cx: px, cy: py, r: 3, fill: color, stroke: "var(--panel)", "stroke-width": 1.5 }, svg);
       if (i !== 0 && p.v === pts[i - 1].v) return;  // same as before -> no label
       const anchor = i === 0 ? "start" : i === pts.length - 1 ? "end" : "middle";
-      const t = el("text", { x: px, y: py - 46, class: "ptlabel", "text-anchor": anchor }, svg);
+      // if the label would land behind the top-left balance box, drop it below the dot
+      const below = (py - 46) < (m.t + 6) && px < m.l + 300;
+      const t = el("text", { x: px, y: below ? py + 30 : py - 46, class: "ptlabel", "text-anchor": anchor }, svg);
       el("tspan", { x: px }, t).textContent = money(p.v);
       el("tspan", { x: px, dy: "1.2em", class: "inr" }, t).textContent = inr(p.v);
     });
