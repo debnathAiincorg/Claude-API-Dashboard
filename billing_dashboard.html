@@ -57,9 +57,9 @@
   .chart { position: relative; margin-top: 0; flex: 1; min-height: 300px; }
   svg { display: block; width: 100%; height: 100%; }
   .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-  .ptlabel { fill: var(--text); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;
-    stroke: var(--panel); stroke-width: 3.5px; paint-order: stroke; }
-  .ptlabel .inr { fill: var(--accent); font-size: 11px; font-weight: 600; }
+  .ptlabel { fill: var(--text); font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums;
+    stroke: var(--panel); stroke-width: 5px; paint-order: stroke; }
+  .ptlabel .inr { fill: var(--accent); font-size: 22px; font-weight: 600; }
   .tip {
     position: absolute; pointer-events: none; background: #fff; color: var(--text); border: 1px solid var(--border);
     border-radius: 8px; padding: 6px 10px; font-size: 12px; white-space: nowrap; display: none;
@@ -178,7 +178,7 @@
     $("updTime").textContent = fmtIST(pts[pts.length - 1].t);
 
     const W = chart.clientWidth, H = chart.clientHeight;
-    const m = { l: 8, r: 64, t: 92, b: 26 };  // extra top room for the balance overlay
+    const m = { l: 8, r: 64, t: 110, b: 26 };  // extra top room for the balance overlay + big labels
     const iw = W - m.l - m.r, ih = H - m.t - m.b;
     let lo = Math.min(...vals), hi = Math.max(...vals);
     const pad = (hi - lo) * 0.12 || Math.max(hi * 0.02, 0.5);
@@ -229,7 +229,7 @@
       el("circle", { cx: px, cy: py, r: 3, fill: color, stroke: "var(--panel)", "stroke-width": 1.5 }, svg);
       if (i !== 0 && p.v === pts[i - 1].v) return;  // same as before -> no label
       const anchor = i === 0 ? "start" : i === pts.length - 1 ? "end" : "middle";
-      const t = el("text", { x: px, y: py - 24, class: "ptlabel", "text-anchor": anchor }, svg);
+      const t = el("text", { x: px, y: py - 46, class: "ptlabel", "text-anchor": anchor }, svg);
       el("tspan", { x: px }, t).textContent = money(p.v);
       el("tspan", { x: px, dy: "1.2em", class: "inr" }, t).textContent = inr(p.v);
     });
