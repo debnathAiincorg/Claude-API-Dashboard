@@ -57,8 +57,9 @@
   .chart { position: relative; margin-top: 0; flex: 1; min-height: 300px; }
   svg { display: block; width: 100%; height: 100%; }
   .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-  .ptlabel { fill: var(--text); font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums;
-    stroke: var(--panel); stroke-width: 3px; paint-order: stroke; }
+  .ptlabel { fill: var(--text); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;
+    stroke: var(--panel); stroke-width: 3.5px; paint-order: stroke; }
+  .ptlabel .inr { fill: var(--accent); font-size: 11px; font-weight: 600; }
   .tip {
     position: absolute; pointer-events: none; background: #fff; color: var(--text); border: 1px solid var(--border);
     border-radius: 8px; padding: 6px 10px; font-size: 12px; white-space: nowrap; display: none;
@@ -140,6 +141,8 @@
 
   const $ = id => document.getElementById(id);
   const money = v => "$" + v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const INR_RATE = 88;  // ₹ per $1 — change this one number if the rate moves
+  const inr = v => "₹" + Math.round(v * INR_RATE).toLocaleString("en-IN");
   const fmtTime = d => d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   const fmtIST = d => d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: true });
   const chart = $("chart"), tip = $("tip");
@@ -220,13 +223,15 @@
       el("path", { d: line + `L${x(t1)},${m.t + ih}L${x(t0)},${m.t + ih}Z`, fill: "url(#fill)" }, svg);
       el("path", { d: line, fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round" }, svg);
     }
-    // a dot + the amount at EVERY point
+    // a dot at every point, but the amount only where the value CHANGED
     pts.forEach((p, i) => {
       const px = x(+p.t), py = y(p.v);
       el("circle", { cx: px, cy: py, r: 3, fill: color, stroke: "var(--panel)", "stroke-width": 1.5 }, svg);
+      if (i !== 0 && p.v === pts[i - 1].v) return;  // same as before -> no label
       const anchor = i === 0 ? "start" : i === pts.length - 1 ? "end" : "middle";
-      el("text", { x: px, y: py - 8, class: "ptlabel", "text-anchor": anchor }, svg)
-        .textContent = money(p.v);
+      const t = el("text", { x: px, y: py - 24, class: "ptlabel", "text-anchor": anchor }, svg);
+      el("tspan", { x: px }, t).textContent = money(p.v);
+      el("tspan", { x: px, dy: "1.2em", class: "inr" }, t).textContent = inr(p.v);
     });
 
     // last-price dashed line + dot
