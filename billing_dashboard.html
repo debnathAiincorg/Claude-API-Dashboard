@@ -72,9 +72,6 @@
   .stat .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
   .empty { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--muted); text-align: center; }
   .live { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 8px; vertical-align: middle; }
-  #refreshBtn { font-size: 12px; margin-left: 8px; vertical-align: middle; cursor: pointer;
-    background: #fff; color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px; }
-  #refreshBtn:hover { border-color: var(--accent); color: var(--accent); }
   /* flashing Updated / Not Updated pill */
   .pill { background: #fff; font-size: 13px; font-weight: 600; border-radius: 999px; padding: 5px 13px;
     border: 1px solid; display: inline-flex; align-items: center; gap: 7px; vertical-align: middle; }
@@ -99,7 +96,6 @@
   <header class="bar topbar">
     <span class="label" style="margin-left:auto">Last updated (Indian time): <b id="updTime">—</b></span>
     <span class="pill not flash" id="status"><i></i> Not Updated</span>
-    <button id="refreshBtn" title="Check for new data now">Refresh</button>
   </header>
 
   <!-- LEFT SIDEBAR -->
@@ -304,7 +300,6 @@
     s.className = "pill flash " + (on ? "ok" : "not");
     s.lastChild.textContent = on ? " Updated" : " Not Updated";
   }
-  $("refreshBtn").addEventListener("click", poll);
   render();
   poll();
   setInterval(poll, POLL_MS);
