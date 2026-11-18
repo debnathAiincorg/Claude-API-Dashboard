@@ -32,11 +32,13 @@
   .brand { font-size: 18px; font-weight: 600; }
   /* balance block drawn inside the chart, top-left (stock style) */
   .card { position: relative; }
-  .overlay { position: absolute; top: 16px; left: 20px; z-index: 2; pointer-events: none;
+  .overlay { position: absolute; top: 16px; left: 20px; right: 20px; z-index: 2; pointer-events: none;
     text-shadow: 0 0 6px #fff, 0 0 6px #fff, 0 0 6px #fff; }
-  .overlay .brand { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .overlay .brand { font-size: 15px; font-weight: 600; margin-bottom: 6px; text-align: center; }
   .overlay .price { font-size: 30px; line-height: 1.1; }
-  .overlay .chg { margin-top: 2px; }
+  .overlay .price-inr { font-size: 20px; font-weight: 600; color: var(--accent); }
+  .overlay .price-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .overlay .chg { margin-top: 0; }
   h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
   .sub { color: var(--muted); margin: 0 0 24px; }
   .card { background: var(--panel); border: 1px solid var(--border); border-radius: 0; padding: 20px;
@@ -107,8 +109,11 @@
       <div class="overlay">
         <div class="brand">Claude API Credit Balance</div>
         <div class="label">Credit balance</div>
-        <div class="price" id="price">—</div>
-        <div class="chg flat" id="chg">No data yet</div>
+        <div class="price-row">
+          <span class="price" id="price">—</span>
+          <span class="price-inr" id="priceInr"></span>
+          <span class="chg flat" id="chg">No data yet</span>
+        </div>
       </div>
       <div class="chart" id="chart"><div class="tip" id="tip"></div></div>
     </div>
@@ -167,6 +172,7 @@
     const dir = diff > 0.004 ? "up" : diff < -0.004 ? "down" : "flat";
     const color = dir === "up" ? "var(--up)" : dir === "down" ? "var(--down)" : "var(--muted)";
     $("price").textContent = money(last);
+    $("priceInr").textContent = inr(last);
     $("chg").className = "chg " + dir;
     $("chg").textContent = (diff >= 0 ? "+" : "−") + money(Math.abs(diff)) +
       " (" + (pct >= 0 ? "+" : "") + pct.toFixed(2) + "%) " + (range ? "this period" : "since first reading");
