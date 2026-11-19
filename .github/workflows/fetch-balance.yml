@@ -16,6 +16,7 @@ on:
     branches: [main]
     paths:
       - billing_dashboard.html
+      - usage.html
       - billing_data.json
 
 concurrency:
@@ -70,7 +71,7 @@ jobs:
 
       - run: |
           mkdir _site
-          cp billing_dashboard.html billing_data.json _site/
+          cp billing_dashboard.html usage.html billing_data.json _site/
           cp billing_dashboard.html _site/index.html
 
       - uses: actions/configure-pages@v5

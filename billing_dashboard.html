@@ -30,6 +30,12 @@
   .bottombar { grid-area: bottom; padding: 10px 16px; color: var(--muted); font-size: 12px;
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .brand { font-size: 18px; font-weight: 600; }
+  /* page nav in the top bar */
+  .nav { display: flex; gap: 6px; }
+  .navlink { text-decoration: none; color: var(--muted); font-size: 13px; font-weight: 600;
+    padding: 6px 13px; border-radius: 6px; border: 1px solid transparent; }
+  .navlink:hover { color: var(--text); border-color: var(--border); }
+  .navlink.on { color: var(--accent); background: #fff; border-color: var(--border); }
   /* balance block drawn inside the chart, top-left (stock style) */
   .card { position: relative; }
   .overlay { position: absolute; top: 16px; left: 20px; right: 20px; z-index: 2; pointer-events: none;
@@ -96,6 +102,10 @@
 <div class="app">
   <!-- TOP BAR -->
   <header class="bar topbar">
+    <nav class="nav">
+      <a href="index.html" class="navlink on">Balance</a>
+      <a href="usage.html" class="navlink">Daily usage</a>
+    </nav>
     <span class="label" style="margin-left:auto">Last updated (Indian time): <b id="updTime">—</b></span>
     <span class="pill not flash" id="status"><i></i> Not Updated</span>
   </header>
