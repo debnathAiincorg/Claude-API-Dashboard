@@ -42,8 +42,11 @@
   .kioskbtn.on { color: var(--accent); border-color: var(--accent); }
   #rotBtn { margin-left: auto; }
   .bottombar { position: relative; }
-  .rotbar { position: absolute; left: 0; right: 0; top: 0; height: 5px; background: var(--grid); display: none; }
-  .rotfill { height: 100%; width: 0; background: var(--up); transition: width 1s linear, background .2s; }
+  .rotbar { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: rgba(47,111,176,.16); display: none; z-index: 3; }
+  .rotfill { height: 100%; width: 0; background: #3f86cf; transition: width 1s linear; }
+  @keyframes kfade { from { opacity: 0; } to { opacity: 1; } }
+  body { animation: kfade .35s ease; }
+  body.leaving { opacity: 0; transition: opacity .3s ease; }
   .card { position: relative; background: var(--panel); border: 1px solid var(--border); border-radius: 0;
     padding: 20px; height: 100%; display: flex; flex-direction: column; }
   .overlay { position: absolute; top: 16px; left: 20px; right: 20px; z-index: 2; pointer-events: none;
@@ -330,23 +333,23 @@
     remaining = ROTATE_SECS; paint();
   });
   function markActive() {
-    active = true; remaining = ROTATE_SECS;
+    active = true;                        // freeze the line where it is (don't reset)
     clearTimeout(idleT); idleT = setTimeout(() => { active = false; }, IDLE_MS);
   }
   ["mousemove", "mousedown", "keydown", "touchstart", "wheel", "scroll"].forEach(ev =>
     window.addEventListener(ev, markActive, { passive: true }));
+  let navigating = false;
+  function go() {
+    navigating = true;
+    document.body.classList.add("leaving");   // smooth fade before switching
+    setTimeout(() => { location.href = ORDER[(idx + 1) % ORDER.length]; }, 300);
+  }
   setInterval(() => {
-    if (!on()) return;
-    if (active) {                       // stopped: empty + red
-      if (fill) { fill.style.background = "var(--down)"; fill.style.width = "0%"; }
-      return;
-    }
-    remaining--;                        // working: fill up + green
-    if (fill) {
-      fill.style.background = "var(--up)";
-      fill.style.width = ((ROTATE_SECS - remaining) / ROTATE_SECS * 100) + "%";
-    }
-    if (remaining <= 0) location.href = ORDER[(idx + 1) % ORDER.length];
+    if (!on() || navigating) return;
+    if (active) return;                  // frozen in place while you are active
+    remaining--;                         // fills left -> right over 10s
+    if (fill) fill.style.width = ((ROTATE_SECS - remaining) / ROTATE_SECS * 100) + "%";
+    if (remaining <= 0) go();
   }, 1000);
   const fs = document.getElementById("fsBtn");
   if (fs) fs.addEventListener("click", () => {
