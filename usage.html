@@ -41,6 +41,9 @@
   .kioskbtn:hover { color: var(--text); border-color: var(--accent); }
   .kioskbtn.on { color: var(--accent); border-color: var(--accent); }
   #rotBtn { margin-left: auto; }
+  .bottombar { position: relative; }
+  .rotbar { position: absolute; left: 0; right: 0; top: 0; height: 5px; background: var(--grid); display: none; }
+  .rotfill { height: 100%; width: 0; background: var(--up); transition: width 1s linear, background .2s; }
   .card { position: relative; background: var(--panel); border: 1px solid var(--border); border-radius: 0;
     padding: 20px; height: 100%; display: flex; flex-direction: column; }
   .overlay { position: absolute; top: 16px; left: 20px; right: 20px; z-index: 2; pointer-events: none;
@@ -121,6 +124,7 @@
 
   <!-- BOTTOM STATUS BAR -->
   <footer class="bar bottombar">
+    <div class="rotbar" id="rotBar"><div class="rotfill" id="rotFill"></div></div>
     <span id="footNote">Usage = actual API cost each day.</span>
     <button class="kioskbtn" id="rotBtn" title="Auto-rotate the 3 dashboards"><span class="ico">▶</span> <span id="rotLabel">Auto-rotate: Off</span></button>
     <button class="kioskbtn" id="fsBtn" title="Fullscreen">⛶</button>
@@ -332,6 +336,8 @@
   const btn = document.getElementById("rotBtn");
   const label = document.getElementById("rotLabel");
   const ico = btn && btn.querySelector(".ico");
+  const bar = document.getElementById("rotBar");
+  const fill = document.getElementById("rotFill");
   let remaining = ROTATE_SECS, active = false, idleT = null;
   const on = () => { try { return localStorage.getItem("kiosk") === "on"; } catch (e) { return false; } };
   function paint() {
@@ -340,6 +346,7 @@
     btn.classList.toggle("on", o);
     if (ico) ico.textContent = o ? "⏸" : "▶";
     if (label) label.textContent = o ? "Auto-rotate: On" : "Auto-rotate: Off";
+    if (bar) bar.style.display = o ? "block" : "none";
   }
   if (btn) btn.addEventListener("click", () => {
     try { localStorage.setItem("kiosk", on() ? "off" : "on"); } catch (e) {}
@@ -352,8 +359,16 @@
   ["mousemove", "mousedown", "keydown", "touchstart", "wheel", "scroll"].forEach(ev =>
     window.addEventListener(ev, markActive, { passive: true }));
   setInterval(() => {
-    if (!on() || active) return;
-    remaining--;
+    if (!on()) return;
+    if (active) {                       // stopped: empty + red
+      if (fill) { fill.style.background = "var(--down)"; fill.style.width = "0%"; }
+      return;
+    }
+    remaining--;                        // working: fill up + green
+    if (fill) {
+      fill.style.background = "var(--up)";
+      fill.style.width = ((ROTATE_SECS - remaining) / ROTATE_SECS * 100) + "%";
+    }
     if (remaining <= 0) location.href = ORDER[(idx + 1) % ORDER.length];
   }, 1000);
   const fs = document.getElementById("fsBtn");
