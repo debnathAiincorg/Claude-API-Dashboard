@@ -19,6 +19,7 @@ on:
       - usage.html
       - monthly.html
       - billing_data.json
+      - cost_data.json
 
 concurrency:
   group: fetch-balance
@@ -47,12 +48,17 @@ jobs:
           BILLING_STORAGE_STATE: ${{ secrets.BILLING_STORAGE_STATE }}
         run: python fetch_billing.py
 
-      - name: Save billing_data.json
+      - name: Run fetch_cost.py
+        env:
+          BILLING_STORAGE_STATE: ${{ secrets.BILLING_STORAGE_STATE }}
+        run: python fetch_cost.py
+
+      - name: Save data files
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add billing_data.json
-          git diff --staged --quiet || git commit -m "New balance reading"
+          git add billing_data.json cost_data.json
+          git diff --staged --quiet || git commit -m "New balance + cost reading"
           git push
 
   publish:
@@ -72,7 +78,7 @@ jobs:
 
       - run: |
           mkdir _site
-          cp billing_dashboard.html usage.html monthly.html billing_data.json _site/
+          cp billing_dashboard.html usage.html monthly.html billing_data.json cost_data.json _site/
           cp billing_dashboard.html _site/index.html
 
       - uses: actions/configure-pages@v5

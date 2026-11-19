@@ -43,6 +43,11 @@
   .overlay .total-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   .overlay .total { font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .overlay .total-inr { font-size: 20px; font-weight: 600; color: var(--accent); }
+  .overlay .seg { pointer-events: auto; display: inline-flex; gap: 4px; margin-top: 10px; text-shadow: none; }
+  .overlay .seg button { background: #fff; color: var(--muted); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 11px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .overlay .seg button:hover { color: var(--text); border-color: var(--accent); }
+  .overlay .seg button.on { color: var(--accent); border-color: var(--accent); }
   .chart { position: relative; margin-top: 0; flex: 1; min-height: 300px; }
   svg { display: block; width: 100%; height: 100%; }
   .axis { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -98,6 +103,10 @@
           <span class="total-inr" id="totalInr"></span>
           <span class="label">total so far</span>
         </div>
+        <div class="seg" id="seg">
+          <button data-mode="cost" class="on">API cost</button>
+          <button data-mode="credit">Credit used</button>
+        </div>
       </div>
       <div class="chart" id="chart"><div class="tip" id="tip"></div></div>
     </div>
@@ -105,7 +114,7 @@
 
   <!-- BOTTOM STATUS BAR -->
   <footer class="bar bottombar">
-    <span>Usage = how much the credit balance dropped each month.</span>
+    <span id="footNote">Usage = actual API cost each month.</span>
   </footer>
 </div>
 
@@ -114,6 +123,7 @@
   const POLL_MS = 30000;
   const RELOAD_MS = 300000;
   let lastRaw = null, loaded = false, offline = false, MONTHS = [], TOTAL = 0, lastT = null;
+  let readings = [], COST = {}, mode = "cost";   // "cost" = API cost, "credit" = balance drop
 
   const $ = id => document.getElementById(id);
   const money = v => "$" + v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -139,6 +149,24 @@
       }
     }
     return Object.keys(spend).sort().map(k => ({ key: k, amt: spend[k] }));
+  }
+
+  // Per-month ACTUAL API cost from cost_data.json.
+  function computeMonthsCost(costMap) {
+    const spend = {};
+    for (const d in costMap) {
+      const k = d.slice(0, 7);
+      spend[k] = (spend[k] || 0) + costMap[d];
+    }
+    return Object.keys(spend).sort().map(k => ({ key: k, amt: spend[k] }));
+  }
+
+  function recompute() {
+    MONTHS = mode === "cost" ? computeMonthsCost(COST) : computeMonths(readings);
+    TOTAL = MONTHS.reduce((s, d) => s + d.amt, 0);
+    $("footNote").textContent = mode === "cost"
+      ? "Usage = actual API cost each month."
+      : "Usage = how much the credit balance dropped each month.";
   }
 
   function render() {
@@ -213,20 +241,25 @@
 
   async function poll() {
     try {
-      const res = await fetch("billing_data.json?_=" + Date.now(), { cache: "no-store" });
-      if (!res.ok) throw new Error(res.status);
-      const raw = await res.text();
+      const [bRes, cRes] = await Promise.all([
+        fetch("billing_data.json?_=" + Date.now(), { cache: "no-store" }),
+        fetch("cost_data.json?_=" + Date.now(), { cache: "no-store" }).catch(() => null),
+      ]);
+      if (!bRes.ok) throw new Error(bRes.status);
+      const raw = await bRes.text();
+      const costRaw = (cRes && cRes.ok) ? await cRes.text() : "{}";
       offline = false;
       setLive(true);
-      if (raw !== lastRaw) {
-        lastRaw = raw;
-        const readings = JSON.parse(raw || "[]")
+      const combined = raw + "||" + costRaw;
+      if (combined !== lastRaw) {
+        lastRaw = combined;
+        readings = JSON.parse(raw || "[]")
           .map(p => ({ t: new Date(p.t), v: +p.balance }))
           .sort((a, b) => a.t - b.t);
         lastT = readings.length ? readings[readings.length - 1].t : null;
-        MONTHS = computeMonths(readings);
-        TOTAL = MONTHS.reduce((s, d) => s + d.amt, 0);
+        COST = JSON.parse(costRaw || "{}");
         loaded = true;
+        recompute();
         render();
       }
     } catch (e) {
@@ -240,6 +273,13 @@
     s.className = "pill flash " + (on ? "ok" : "not");
     s.lastChild.textContent = on ? " Updated" : " Not Updated";
   }
+  $("seg").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    mode = b.dataset.mode;
+    document.querySelectorAll("#seg button").forEach(n => n.classList.toggle("on", n === b));
+    recompute();
+    render();
+  });
   window.addEventListener("resize", render);
   render();
   poll();
